@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 
 // Load the Excel file
-const filePath = path.join("C:", "Users", "ayush", "Downloads", "MilkyWays_Combo_DRAFT.xlsx"); // Replace with your file path
+const filePath = path.join("C:", "Users", "AyushSingh", "Downloads", "MilkyWays_Combo_DRAFT.xlsx"); // Replace with your file path
 const workbook = xlsx.readFile(filePath);
 
 // Filter sheets whose names start with "export_excel"
@@ -39,22 +39,25 @@ const parseDataByTag = (tagName, headers, dataRows) => {
 
   switch (parsingRule) {
     case "weightRowByRow":
-      // Special parsing logic for WEIGHT tags: Parse each row as an object with headers
-      return validDataRows.map((row) => {
-        const obj = {};
-        headers.forEach((header, idx) => {
-          obj[header] = row[idx] !== undefined ? row[idx] : "";
-        });
-        return obj;
-      });
+      // Special parsing logic for WEIGHT tags
+      return parseWeightRows(dataRows, headers);
 
     case "rowByRow":
       // Parse each row as an array of valid values
-      return validDataRows.map(filterValidValues);
+      return validDataRows.map((row) => {
+        if (row.every((cell) => cell === null || cell === "" || cell === undefined)) {
+          return null; // End the section if the row is empty
+        }
+        return filterValidValues(row);
+      }).filter(item => item !== null); // Remove null items (empty rows)
 
     case "keyValue":
       // Parse rows as key-value pairs (first column is the key)
       return validDataRows.reduce((obj, row) => {
+        if (row.every((cell) => cell === null || cell === "" || cell === undefined)) {
+          return obj; // No more data to process
+        }
+
         const filteredRow = filterValidValues(row);
         const key = filteredRow[0]; // First column is the key
         const value = filteredRow.slice(1); // Remaining columns are the value
@@ -71,11 +74,48 @@ const parseDataByTag = (tagName, headers, dataRows) => {
       // Default parsing: Map headers to data columns
       return headers.reduce((obj, header, idx) => {
         obj[header] = validDataRows
-          .map((row) => row[idx])
+          .map((row) => {
+            if (row.every((cell) => cell === null || cell === "" || cell === undefined)) {
+              return null;
+            }
+            return row[idx];
+          })
           .filter((value) => value !== null && value !== "" && value !== undefined); // Remove invalid values
         return obj;
       }, {});
   }
+};
+
+// Function to parse weight rows
+const parseWeightRows = (rows, headers) => {
+  //console.log("inside parseWeightRows", rows, headers);
+
+  const result = []; // Array to hold the final parsed objects
+
+  // Iterate over rows
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    const row = rows[rowIndex];
+    if (row.length === 0 || row[0] === undefined) break;
+
+    const obj = {};
+
+    // Iterate over headers
+    for (let idx = 0; idx < headers.length; idx++) {
+      const header = headers[idx];
+
+      // Check if the header is empty or invalid
+      if (!header || header.length === 0 || row[idx] === undefined) {
+        break; // Skip processing for this header
+      }
+
+      obj[header] = row[idx] !== undefined ? row[idx] : "";
+    }
+
+    // Add the constructed object to the result array
+    result.push(obj);
+  }
+
+  return result; // Return the final parsed array
 };
 
 // Example custom function (for tags like #metadata)
@@ -92,7 +132,7 @@ const customParsingFunction = (headers, dataRows) => {
 let data = {}; // This should be declared outside the loop
 
 // Process each sheet
-exportSheets.forEach((sheetName) => {
+workbook.SheetNames.forEach((sheetName) => {
   const sheet = workbook.Sheets[sheetName];
 
   // Convert sheet to JSON (2D array format)
@@ -122,11 +162,17 @@ exportSheets.forEach((sheetName) => {
           data[tagName] = []; // Initialize tag array
         }
 
-        // Step 3: Extract headers and data for the tag
-        const nextTagColIndex =
-          tags[tagIndex + 1]?.colIndex ||
-          tags.find((t) => t.tag === "end")?.colIndex ||
-          row.length + 1; // End column for this tag
+        // Step 3: Determine column range for the tag
+        let nextTagColIndex;
+        if (tagName.toLowerCase().startsWith("weight")) {
+          nextTagColIndex = colIndex+1; // For WEIGHT tags, only process the next column
+        } else {
+          nextTagColIndex =
+            tags[tagIndex + 1]?.colIndex ||
+            tags.find((t) => t.tag === "end")?.colIndex ||
+            row.length + 1; // Default behavior
+        }
+
         const headersRow = rows[rowIndex + 1] || []; // Header row is the next row or empty if missing
         const dataRows = rows.slice(rowIndex + 2); // Data rows start after headers
 

@@ -1,4 +1,11 @@
 {
+  "name": "parse-excel-tool",
+  "version": "1.0.0",
+  "description": "A tool to parse Excel files",
+  "main": "parseExcel.js",
+  "bin": {
+    "parse-excel": "./parseExcel.js"
+  },
   "dependencies": {
     "xlsx": "^0.18.5"
   }
